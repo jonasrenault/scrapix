@@ -26,7 +26,7 @@ dependencies = [
 "Repository" = "https://github.com/jonasrenault/scrapix"
 
 [project.scripts]
-scrapix = "scrapix.google:app"
+scrapix = "scrapix.cli.main:app"
 
 [dependency-groups]
 dev = [

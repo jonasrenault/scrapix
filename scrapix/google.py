@@ -4,22 +4,19 @@ import random
 import time
 from pathlib import Path
 from typing import Annotated
-from urllib.request import Request, urlopen
-from uuid import uuid4
 
 import typer
 from fake_useragent import UserAgent
 from PIL import Image
 from rich.logging import RichHandler
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from tqdm import tqdm
-
-from scrapix.config.settings import settings
 
 FORMAT = "%(message)s"
 logging.basicConfig(
@@ -46,6 +43,7 @@ class GoogleImageScraper:
         self.headless = headless
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
+        self.screens = 0
 
         options = Options()
         if headless:
@@ -55,17 +53,23 @@ class GoogleImageScraper:
         user_agent = UserAgent().random
         options.add_argument(f"--user-agent={user_agent}")
         options.add_argument("start-maximized")
+        options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
         self.driver = webdriver.Chrome(options=options)
+        # self.driver.execute_script(
+        #     "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        # )
 
         # set random window size
-        self.driver.set_window_size(random.randint(1000, 2080), random.randint(800, 2080))
-        google_home = "https://www.google.com"
-        self.driver.get(google_home)
+        viewport = (random.randint(800, 1000), random.randint(1000, 2080))
+        self.driver.set_window_size(*viewport)
+
         LOGGER.info(
-            f"Chrome web driver initialized. "
-            f"Page title for {google_home}: {self.driver.title}"
+            f"Chrome web driver initialized. \n"
+            f"Viewport: {viewport}\nOptions: {options.to_capabilities()}\n"
+            f"UserAgent: {self.driver.execute_script("return navigator.userAgent;")}\n"
+            f"WebDriver: {self.driver.execute_script("return navigator.webdriver;")}\n"
         )
 
         self.save_dir = save_dir / search_term
@@ -89,30 +93,32 @@ class GoogleImageScraper:
             WebDriverWait(self.driver, 5).until(
                 EC.element_to_be_clickable((By.ID, "W0wltc"))
             ).click()
-        except Exception as e:
-            self.driver.save_screenshot("exception.png")
+        except TimeoutException as e:
             LOGGER.warning("Exception clicking on refuse cookie button")
+            self._screenshot()
             raise e
 
-    def _click_recaptcha(self):
-        # https://stackoverflow.com/questions/58872451/how-can-i-bypass-the-google-captcha-with-selenium-and-python
-        try:
-            LOGGER.info("Clicking on reCaptch")
-            WebDriverWait(self.driver, 5).until(
-                EC.frame_to_be_available_and_switch_to_it(
-                    (
-                        By.CSS_SELECTOR,
-                        "iframe[name^='a-'][src^='https://www.google.com/recaptcha/api2/anchor?']",
-                    )
-                )
-            )
-            WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//span[@id='recaptcha-anchor']"))
-            ).click()
-        except Exception as e:
-            self.driver.save_screenshot("exception.png")
-            LOGGER.warning("Exception clicking on reCaptcha", exc_info=True)
-            raise e
+    # def _click_recaptcha(self):
+    #     # https://stackoverflow.com/questions/58872451/how-can-i-bypass-the-google-captcha-with-selenium-and-python
+    #     try:
+    #         LOGGER.info("Clicking on reCaptch")
+    #         WebDriverWait(self.driver, 5).until(
+    #             EC.frame_to_be_available_and_switch_to_it(
+    #                 (
+    #                     By.XPATH,
+    #                     "//iframe[starts-with(@name, 'a-') and starts-with(@src, 'https://www.google.com/recaptcha')]",
+    #                 )
+    #             )
+    #         )
+    #         WebDriverWait(self.driver, 5).until(
+    #             EC.element_to_be_clickable(
+    #                 (By.CSS_SELECTOR, "div.recaptcha-checkbox-checkmark")
+    #             )
+    #         ).click()
+    #     except TimeoutException as e:
+    #         LOGGER.warning("Exception clicking on reCaptcha", exc_info=True)
+    #         self._screenshot()
+    #         raise e
 
     def _extract_image_url(self) -> tuple[str | None, str | None]:
         """
@@ -152,6 +158,22 @@ class GoogleImageScraper:
 
         return True
 
+    def _screenshot(
+        self,
+    ):
+        file = f"Screen_{self.screens:>02}.png"
+        self.driver.save_screenshot(file)
+        self.screens += 1
+        screenshot = Image.open(file)
+        screenshot.show()
+
+    def _log_dom(
+        self,
+    ):
+        LOGGER.info(
+            self.driver.execute_script("return document.documentElement.outerHTML")
+        )
+
     def get_image_urls(self) -> dict[str, str]:
         """
         Get image urls for a given search term
@@ -161,15 +183,18 @@ class GoogleImageScraper:
         dict[str, str]
             a dict of url -> image title
         """
-
         # First, do a regular search for the term, and refuse cookie policy popup.
         LOGGER.info(f"Searching images for {self.search_term}")
         self.driver.get(f"https://www.google.com/search?q={self.search_term}")
+        time.sleep(1 + random.random())
+        self._screenshot()
         try:
             self._refuse_rgpd()
         except Exception:
-            self._click_recaptcha()
-            self._refuse_rgpd()
+            self._log_dom()
+
+        time.sleep(1 + random.random())
+        self._screenshot()
 
         # Click on images search button.
         LOGGER.info("Clicking Images search button")
@@ -227,53 +252,6 @@ class GoogleImageScraper:
             visited_thumbnails = thumbnails
         return image_urls
 
-    def save_images(self, image_urls: dict[str, str]) -> None:
-        LOGGER.info("Saving images to disk.")
-
-        for url, title in tqdm(image_urls.items()):
-            if url in self.downloaded_urls:
-                LOGGER.info(f"Not downloading {url} as it already exists.")
-                continue
-
-            try:
-                with Image.open(urlopen(Request(url, headers=settings.HEADERS))) as image:
-                    id = uuid4()
-                    filename = f"{id}.{image.format}"
-                    if image.size is None or (
-                        self.min_resolution[0] <= image.size[0] <= self.max_resolution[0]
-                        and self.min_resolution[1]
-                        <= image.size[1]
-                        <= self.max_resolution[1]
-                    ):
-                        try:
-                            image.save(self.save_dir / filename)
-                        except OSError:
-                            image = image.convert("RGB")
-                            image.save(self.save_dir / filename)
-
-                        self.saved_files.append(
-                            {
-                                "id": str(id),
-                                "url": url,
-                                "title": title,
-                                "size": image.size,
-                            }
-                        )
-                    else:
-                        LOGGER.debug(
-                            f"Not saving image {url} because of invalid dimension "
-                            f"({image.size})"
-                        )
-            except Exception:
-                LOGGER.warning(f"Exception saving image {url}", exc_info=True)
-                continue
-
-        LOGGER.info("Writing metadata file.")
-        # Write metadata
-        with open(self.metadata_file, "w") as f:
-            for image in self.saved_files:
-                f.write(json.dumps(image) + "\n")
-
 
 @app.command()
 def scrape(
@@ -299,8 +277,7 @@ def scrape(
     scraper = GoogleImageScraper(
         output, query, max_images=limit, min_resolution=min_res, max_resolution=max_res
     )
-    image_urls = scraper.get_image_urls()
-    scraper.save_images(image_urls)
+    scraper.get_image_urls()
 
 
 if __name__ == "__main__":

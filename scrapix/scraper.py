@@ -1,12 +1,7 @@
-import dataclasses
-import inspect
-import json
 import logging
 import random
 import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO, Self
 
 from fake_useragent import UserAgent
 from PIL import Image
@@ -19,53 +14,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from scrapix.config.settings import settings
+from scrapix.urls import ImageUrl, read_urls, write_urls
 
 LOGGER = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class ImageUrl:
-    title: str | None
-    url: str
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Self:
-        """
-        Create ImageUrl instance from dict of field -> value.
-
-        Args:
-            data (dict[str, Any]): dict of field -> value.
-
-        Returns:
-            Self: An ImageUrl instance with values instantiated from dict.
-        """
-        instance = cls(
-            **{
-                key: value
-                for key, value in data.items()
-                if key in inspect.signature(cls).parameters
-            }
-        )
-        return instance
-
-
-def read_urls(uri: BinaryIO | Path) -> set[ImageUrl]:
-    """
-    Read a list of ImageUrl as JSON data.
-
-    Args:
-        uri (BinaryIO | Path): input JSON file.
-
-    Returns:
-        set[ImageUrl]: list of ImageUrl.
-    """
-    if isinstance(uri, BinaryIO):
-        json_data = json.load(uri)
-    else:
-        with open(uri, "r") as f:
-            json_data = json.load(f)
-    urls = set([ImageUrl.from_dict(url) for url in json_data])
-    return urls
 
 
 class GoogleImageScraper:
@@ -111,9 +62,7 @@ class GoogleImageScraper:
 
     def _save_urls(self, urls: set[ImageUrl]) -> None:
         urls_file = self.save_dir / self.urls_file
-        json_data = [dataclasses.asdict(url) for url in urls]
-        with open(urls_file, "w") as f:
-            json.dump(json_data, f, indent=2)
+        write_urls(urls, urls_file)
 
     def _setup_webdriver(self):
         """

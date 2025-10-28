@@ -1,8 +1,9 @@
 from pathlib import Path
+from unittest.mock import mock_open, patch
 
 import responses
 
-from scrapix.urls import ImageUrl, get_filename
+from scrapix.urls import ImageUrl, get_filename, read_urls
 
 ROOT_DIR = Path(__file__).parent.parent
 
@@ -14,6 +15,24 @@ def test_urls_can_be_created():
     image_url = ImageUrl(title, url)
     assert image_url.title == title
     assert image_url.url == url
+
+
+def test_read_urls():
+    title1 = "lorem ipsum"
+    title2 = "dolor sit"
+    url1 = "https://i.pinimg.com/ab3034f03fea4afbfc045dd32d3979af.jpg"
+    url2 = "https://cdn.britannica.com/52/Escargot-cooked.jpg"
+    URLS = f'[{{"title": "{title1}", "url": "{url1}"}},{{"title": "{title2}", "url": "{url2}"}}]'  # noqa: E501
+    m = mock_open(read_data=URLS)
+
+    file = Path("urls.json")
+    with patch("builtins.open", m):
+        urls = read_urls(file)
+
+    m.assert_called_once_with(file, "r")
+    assert len(urls) == 2
+    assert ImageUrl(title1, url1) in urls
+    assert ImageUrl(title2, url2) in urls
 
 
 def test_get_filename():

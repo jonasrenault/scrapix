@@ -5,6 +5,7 @@ from typing import Annotated
 import typer
 from rich.logging import RichHandler
 
+from scrapix.config.settings import settings
 from scrapix.scraper import GoogleImageScraper
 
 FORMAT = "%(message)s"
@@ -27,17 +28,12 @@ def scrape(
             dir_okay=True,
             file_okay=False,
         ),
-    ] = Path("./images"),
-    limit: Annotated[int, typer.Option(help="Max number of images to download.")] = 50,
-    min_res: Annotated[
-        tuple[int, int], typer.Option(help="Min resolution (width, height).")
-    ] = (400, 300),
-    max_res: Annotated[
-        tuple[int, int], typer.Option(help="Max resolution (width, height).")
-    ] = (2048, 2048),
+    ] = settings.SCRAPIX_HOME_DIR,
+    limit: Annotated[int, typer.Option(help="Max number of images to download.")] = 10,
+    skip: Annotated[int, typer.Option(help="Number of results to skip.")] = 0,
 ):
-    scraper = GoogleImageScraper(output)
-    scraper.get_image_urls(query, limit, min_res, max_res)
+    scraper = GoogleImageScraper(output.joinpath(query))
+    scraper.get_image_urls(query, limit=limit, skip=skip)
 
 
 if __name__ == "__main__":

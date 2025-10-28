@@ -76,17 +76,23 @@ class ImageUrl:
                 and min_resolution[1] <= image.size[1] <= max_resolution[1]
             )
 
-    def download(self, save_dir: Path):
+    def download(self, save_dir: Path, force: bool = False):
         """
         Download image from url into save_dir. Image filename is taken
-        from url.
+        from url. Image is not downloaded if filename already exists, unless
+        force is True.
 
         Args:
             save_dir (Path): output directory where image is saved.
+            force (bool, optional): force download if image filename already exists.
+                Defaults to False.
         """
+        file = save_dir / get_filename(self.url)
+        if file.exists() and not force:
+            return
+
         response = requests.get(self.url, stream=True, headers=fake_headers())
         response.raise_for_status()
-        file = save_dir / get_filename(self.url)
         with open(file, "wb") as f:
             shutil.copyfileobj(response.raw, f)
 

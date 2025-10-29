@@ -1,6 +1,6 @@
-# 🖼️ Scrapix - Smart, fast, and simple image scraper for Google Image Search
+# 🖼️ Scrapix - Smart, fast, and simple image scraper for Google Images Search
 
-Scrapix is an automated image scraper designed to collect pictures from Google Image Search based on user-defined queries. It streamlines the process of fetching, filtering, and storing image results for use in datasets, research, or creative projects.
+Scrapix is an automated image scraper designed to collect pictures from Google Images Search based on user-defined queries. It streamlines the process of fetching, filtering, and storing image results for use in datasets, research, or creative projects.
 
 ## Installation
 

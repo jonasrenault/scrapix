@@ -62,6 +62,7 @@ class GoogleImageScraper:
 
     def _save_urls(self, urls: set[ImageUrl]) -> None:
         urls_file = self.save_dir / self.urls_file
+        LOGGER.info(f"Saving {len(urls)} urls to {urls_file}.")
         write_urls(urls, urls_file)
 
     def _setup_webdriver(self):
@@ -137,6 +138,7 @@ class GoogleImageScraper:
             LOGGER.error("Recaptcha detected.")
             raise RuntimeError("Recaptcha detected.")
         except TimeoutException:
+            LOGGER.info("ReCaptcha not found.")
             # no recaptch detected.
             return
 
@@ -149,7 +151,7 @@ class GoogleImageScraper:
         Raises:
             TimeoutException: if `Reject all` button cannot be located on page.
         """
-        LOGGER.info("Clicking on `Reject All` cookie button...")
+        LOGGER.info("Clicking on `Reject All` cookie button.")
         try:
             WebDriverWait(self.driver, 5).until(
                 EC.element_to_be_clickable(
@@ -175,7 +177,7 @@ class GoogleImageScraper:
         """
         # Click on images search button.
         try:
-            LOGGER.info("Clicking Images search button")
+            LOGGER.info("Clicking Images search button.")
             time.sleep(1 + random.random())
             WebDriverWait(self.driver, 5).until(
                 EC.element_to_be_clickable((By.LINK_TEXT, settings.IMAGES_LINK_TEXT))
@@ -319,7 +321,7 @@ class GoogleImageScraper:
             # Keep track of thumbnails already seen
             seen_thumbnails = len(thumbnails)
 
-        LOGGER.info(f"Done gathering image urls. Found {len(urls)} image urls.")
+        LOGGER.info(f"Done gathering image urls. Found {len(urls)} new image urls.")
         return urls
 
     def get_image_urls(
@@ -344,7 +346,8 @@ class GoogleImageScraper:
         """
         try:
             LOGGER.info(
-                f"Searching images for {query}. Max {limit} new urls ({skip} skipped)."
+                f"Searching images for '{query}'. Max {limit} new urls ({skip} skipped). "
+                f"{len(self.urls)} urls already scraped."
             )
             self.driver.get(f"https://www.google.com/search?q={query}")
             time.sleep(1 + random.random())
@@ -353,7 +356,8 @@ class GoogleImageScraper:
             self._refuse_cookies()
             self._click_images_search()
             urls = self._gather_urls(limit, skip, keywords)
-            self._save_urls(self.urls | urls)
+            self.urls |= urls
+            self._save_urls(self.urls)
 
             self._log_page()
             return urls

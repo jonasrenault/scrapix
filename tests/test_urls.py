@@ -3,7 +3,7 @@ from unittest.mock import mock_open, patch
 
 import responses
 
-from scrapix.urls import ImageUrl, get_filename, read_urls
+from scrapix.urls import ImageUrl, read_urls
 
 ROOT_DIR = Path(__file__).parent.parent
 
@@ -36,13 +36,17 @@ def test_read_urls():
 
 
 def test_get_filename():
-    url = "https://cdn.store-factory.com/www.reptile-paradise.fr/content/product%20image.jpg?v=1720559822"
-    filename = get_filename(url)
-    assert filename == "product image.jpg"
+    url = ImageUrl(
+        None,
+        "https://cdn.store-factory.com/www.reptile-paradise.fr/content/product%20image.jpg?v=1720559822",
+    )
+    assert url.filename == "product image.jpg"
 
-    url = "https://www.imagesdoc.com/wp-content/uploads/sites/33/2018/10/AdobeStock_67152957-e1540977088518.jpeg"
-    filename = get_filename(url)
-    assert filename == "AdobeStock_67152957-e1540977088518.jpeg"
+    url = ImageUrl(
+        None,
+        "https://www.imagesdoc.com/wp-content/uploads/sites/33/2018/10/AdobeStock_67152957-e1540977088518.jpeg",
+    )
+    assert url.filename == "AdobeStock_67152957-e1540977088518.jpeg"
 
 
 @responses.activate

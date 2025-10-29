@@ -1,7 +1,9 @@
 import dataclasses
 import inspect
 import json
+import logging
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, Self
@@ -10,6 +12,9 @@ from urllib.parse import unquote, urlparse
 import requests
 from fake_useragent import UserAgent
 from PIL import Image
+from tqdm import tqdm
+
+LOGGER = logging.getLogger(__name__)
 
 
 def fake_headers() -> dict[str, str]:
@@ -34,6 +39,19 @@ def fake_headers() -> dict[str, str]:
 class ImageUrl:
     title: str | None
     url: str
+
+    @property
+    def filename(self) -> str:
+        """
+        Get filename from image url.
+
+        Returns:
+            str: the image's filename.
+        """
+        parsed_url = urlparse(self.url)
+        path = parsed_url.path
+        filename = unquote(Path(path).name)
+        return filename
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
@@ -87,7 +105,7 @@ class ImageUrl:
             force (bool, optional): force download if image filename already exists.
                 Defaults to False.
         """
-        file = save_dir / get_filename(self.url)
+        file = save_dir / self.filename
         if file.exists() and not force:
             return
 
@@ -129,17 +147,7 @@ def write_urls(urls: set[ImageUrl], file: Path) -> None:
         json.dump(json_data, f, indent=2)
 
 
-def get_filename(url: str) -> str:
-    """
-    Get filename from image url.
-
-    Args:
-        url (str): the image's url
-
-    Returns:
-        str: the image's filename.
-    """
-    parsed_url = urlparse(url)
-    path = parsed_url.path
-    filename = unquote(Path(path).name)
-    return filename
+def download_urls(urls: Iterable[ImageUrl], save_dir: Path, force: bool = False):
+    LOGGER.info(f"Downloading images to {save_dir}.")
+    for url in tqdm(urls):
+        url.download(save_dir=save_dir, force=force)

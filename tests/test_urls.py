@@ -67,3 +67,5 @@ def test_check_dimensions():
     assert image_url.check_dimensions((20, 20), (1200, 1200))
     assert not image_url.check_dimensions((640, 640), (1200, 1200))
     assert not image_url.check_dimensions((20, 20), (320, 320))
+    assert not image_url.check_dimensions((640, 640), None)
+    assert not image_url.check_dimensions(None, (320, 320))

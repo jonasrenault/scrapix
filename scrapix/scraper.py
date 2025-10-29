@@ -187,13 +187,23 @@ class GoogleImageScraper:
             LOGGER.error("Unable to locate `Image` link.")
             raise e
 
-    def _validate_image_url(self, url: ImageUrl, keywords: list[str]) -> bool:
+    def _validate_image_url(
+        self,
+        url: ImageUrl,
+        keywords: list[str],
+        min_res: tuple[int, int] | None = None,
+        max_res: tuple[int, int] | None = None,
+    ) -> bool:
         """
         Validate an ImageUrl.
 
         Args:
             url (ImageUrl): the image url to check.
             keywords (list[str]): keywords to avoid in image url or title
+            min_res (tuple[int, int] | None, optional): minimum resolution.
+                Defaults to None.
+            max_res (tuple[int, int] | None, optional): maximum resolution.
+                Defaults to None.
 
         Returns:
             bool: True if image url is valid (has url and title and is
@@ -205,6 +215,9 @@ class GoogleImageScraper:
         for kw in keywords:
             if kw.lower() in url.url.lower() or kw.lower() in url.title.lower():
                 return False
+
+        if min_res is not None or max_res is not None:
+            return url.check_dimensions(min_res, max_res)
 
         return True
 
@@ -230,6 +243,8 @@ class GoogleImageScraper:
         limit: int,
         urls: set[ImageUrl],
         keywords: list[str],
+        min_res: tuple[int, int] | None = None,
+        max_res: tuple[int, int] | None = None,
     ):
         """
         Loop through the given list of thumbnails, clicking on each one to reveal the
@@ -240,6 +255,10 @@ class GoogleImageScraper:
             limit (int): the maximum number of image urls to extract.
             urls (set[ImageUrl]): the set of collected image urls.
             keywords (list[str]): keywords to avoid in image url or title.
+            min_res (tuple[int, int] | None, optional): minimum resolution.
+                Defaults to None.
+            max_res (tuple[int, int] | None, optional): maximum resolution.
+                Defaults to None.
         """
         # make sure first thumbnail is into view
         if len(thumbnails) > 0:
@@ -263,7 +282,9 @@ class GoogleImageScraper:
                 continue
 
             url = self._extract_image_url()
-            if url is None or not self._validate_image_url(url, keywords):
+            if url is None or not self._validate_image_url(
+                url, keywords, min_res, max_res
+            ):
                 continue
 
             urls.add(url)
@@ -272,7 +293,14 @@ class GoogleImageScraper:
             if len(urls) >= limit:
                 break
 
-    def _gather_urls(self, limit: int, skip: int, keywords: list[str]) -> set[ImageUrl]:
+    def _gather_urls(
+        self,
+        limit: int,
+        skip: int,
+        keywords: list[str],
+        min_res: tuple[int, int] | None = None,
+        max_res: tuple[int, int] | None = None,
+    ) -> set[ImageUrl]:
         """
         Gather image urls from the results page by clicking on each thumbnail. Clicking
         on a thumbnail will display the source image on the side panel, allowing us to
@@ -282,6 +310,10 @@ class GoogleImageScraper:
             limit (int): the maximum limit of image urls to fetch.
             skip (int): number of results to skip.
             keywords (list[str]): keywords to avoid in image url or title
+            min_res (tuple[int, int] | None, optional): minimum resolution.
+                Defaults to None.
+            max_res (tuple[int, int] | None, optional): maximum resolution.
+                Defaults to None.
 
         Returns:
             set[ImageUrl]: a set of ImageUrls
@@ -315,7 +347,12 @@ class GoogleImageScraper:
             # Scroll through thumbnails, clicking on them to get the real image urls
             to_scroll = thumbnails[max(seen_thumbnails, skip) :]
             self._scroll_through_thumbnails(
-                to_scroll, limit=limit, urls=urls, keywords=keywords
+                to_scroll,
+                limit=limit,
+                urls=urls,
+                keywords=keywords,
+                min_res=min_res,
+                max_res=max_res,
             )
 
             # Keep track of thumbnails already seen
@@ -325,7 +362,13 @@ class GoogleImageScraper:
         return urls
 
     def get_image_urls(
-        self, query: str, limit: int = 50, skip: int = 0, keywords: list[str] = []
+        self,
+        query: str,
+        limit: int = 50,
+        skip: int = 0,
+        keywords: list[str] = [],
+        min_res: tuple[int, int] | None = None,
+        max_res: tuple[int, int] | None = None,
     ) -> set[ImageUrl]:
         """
         Main method for GoogleImageScraper. Search google for the `query` and loop
@@ -340,22 +383,23 @@ class GoogleImageScraper:
             skip (int, optional): number of results to skip. Defaults to 0.
             keywords (list[str], optional): keywords to avoid in image url or title.
                 Defaults to [].
+            min_res (tuple[int, int] | None, optional): minimum resolution.
+                Defaults to None.
+            max_res (tuple[int, int] | None, optional): maximum resolution.
+                Defaults to None.
 
         Returns:
             set[ImageUrl]: the collected image urls.
         """
         try:
-            LOGGER.info(
-                f"Searching images for '{query}'. Max {limit} new urls ({skip} skipped). "
-                f"{len(self.urls)} urls already scraped."
-            )
+            self._log_search(query, limit, skip, keywords, min_res, max_res)
             self.driver.get(f"https://www.google.com/search?q={query}")
             time.sleep(1 + random.random())
 
             self._check_recaptcha()
             self._refuse_cookies()
             self._click_images_search()
-            urls = self._gather_urls(limit, skip, keywords)
+            urls = self._gather_urls(limit, skip, keywords, min_res, max_res)
             self.urls |= urls
             self._save_urls(self.urls)
 
@@ -366,3 +410,26 @@ class GoogleImageScraper:
             self._log_page()
 
         return set()
+
+    def _log_search(
+        self,
+        query: str,
+        limit: int = 50,
+        skip: int = 0,
+        keywords: list[str] = [],
+        min_res: tuple[int, int] | None = None,
+        max_res: tuple[int, int] | None = None,
+    ):
+        msg = [
+            (
+                f"Searching images for '{query}'. Max {limit} new urls ({skip} skipped). "
+                f"{len(self.urls)} urls already scraped."
+            )
+        ]
+        if keywords:
+            msg.append(f"Excluding keywords {keywords}.")
+        if min_res:
+            msg.append(f"Min resolution {min_res}.")
+        if max_res:
+            msg.append(f"Min resolution {max_res}.")
+        LOGGER.info("\n".join(msg))

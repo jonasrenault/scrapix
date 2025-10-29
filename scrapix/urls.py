@@ -74,14 +74,16 @@ class ImageUrl:
         return instance
 
     def check_dimensions(
-        self, min_resolution: tuple[int, int], max_resolution: tuple[int, int]
+        self,
+        min_resolution: tuple[int, int] | None,
+        max_resolution: tuple[int, int] | None,
     ) -> bool:
         """
         Check whether image size is between min_resolution and max_resolution.
 
         Args:
-            min_resolution (tuple[int, int]): minimum resolution.
-            max_resolution (tuple[int, int]): maximum resolution.
+            min_resolution (tuple[int, int] | None): minimum resolution.
+            max_resolution (tuple[int, int] | None): maximum resolution.
 
         Returns:
             bool: True if image dimensions are between min_resolution and max_resolution.
@@ -89,10 +91,20 @@ class ImageUrl:
         response = requests.get(self.url, stream=True, headers=fake_headers())
         response.raise_for_status()
         with Image.open(response.raw) as image:  # type: ignore
-            return image.size is None or (
-                min_resolution[0] <= image.size[0] <= max_resolution[0]
-                and min_resolution[1] <= image.size[1] <= max_resolution[1]
-            )
+            if image.size is None:
+                return True
+
+            if min_resolution is not None and (
+                min_resolution[0] > image.size[0] or min_resolution[1] > image.size[1]
+            ):
+                return False
+
+            if max_resolution is not None and (
+                max_resolution[0] < image.size[0] or max_resolution[1] < image.size[1]
+            ):
+                return False
+
+            return True
 
     def download(self, save_dir: Path, force: bool = False):
         """

@@ -73,6 +73,17 @@ def scrape(
     skip: Annotated[
         int, typer.Option("--skip", "-s", help="Number of results to skip.")
     ] = 0,
+    keywords: Annotated[
+        list[str], typer.Option("--keywords", "-k", help="Keywords to exclude.")
+    ] = [],
+    min_res: Annotated[
+        tuple[int, int] | None,
+        typer.Option("--min", help="Minimum resolution of images."),
+    ] = None,
+    max_res: Annotated[
+        tuple[int, int] | None,
+        typer.Option("--max", help="Maximum resolution of images."),
+    ] = None,
     download: Annotated[
         bool, typer.Option(help="Save images on disk after scraping the urls.")
     ] = True,
@@ -83,7 +94,9 @@ def scrape(
 ):
     save_dir = output.joinpath(query)
     scraper = GoogleImageScraper(save_dir)
-    urls = scraper.get_image_urls(query, limit=limit, skip=skip)
+    urls = scraper.get_image_urls(
+        query, limit=limit, skip=skip, keywords=keywords, min_res=min_res, max_res=max_res
+    )
 
     if download:
         download_urls(urls, save_dir=save_dir, force=force)

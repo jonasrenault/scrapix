@@ -99,9 +99,14 @@ scrapix scrape --help
 
 ```python
 from pathlib import Path
-
 from scrapix import GoogleImageScraper
 
-scraper = GoogleImageScraper(Path("./images"))
-scraper.get_image_urls(query="duck", limit=10, keywords=["rubber", "toy"], min_res=(640, 640), max_res=(1200, 1200))
+save_dir = Path("./images")
+scraper = GoogleImageScraper(save_dir)
+# search for images and return a set of image urls
+urls = scraper.get_image_urls(query="duck", limit=10, keywords=["rubber", "toy"], min_res=(640, 640), max_res=(1200, 1200))
+
+# download each image to disk
+for url in urls:
+    url.download(save_dir=save_dir)
 ```

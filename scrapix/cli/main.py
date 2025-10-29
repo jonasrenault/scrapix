@@ -23,10 +23,13 @@ def download(
     ],
     urls_file: Annotated[
         Path,
-        typer.Option(dir_okay=False, file_okay=True, exists=True, help="Urls file name."),
+        typer.Option(
+            "--urls", "-u", dir_okay=False, file_okay=True, help="Urls file name."
+        ),
     ] = Path("urls.json"),
     force: Annotated[
-        bool, typer.Option(help="Force redownload of images already present on disk.")
+        bool,
+        typer.Option(help="Force redownload of images already present on disk."),
     ] = False,
 ):
     """
@@ -74,7 +77,8 @@ def scrape(
         bool, typer.Option(help="Save images on disk after scraping the urls.")
     ] = True,
     force: Annotated[
-        bool, typer.Option(help="Force redownload of images already present on disk.")
+        bool,
+        typer.Option(help="Force redownload of images already present on disk."),
     ] = False,
 ):
     save_dir = output.joinpath(query)

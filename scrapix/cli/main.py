@@ -91,9 +91,14 @@ def scrape(
         bool,
         typer.Option(help="Force redownload of images already present on disk."),
     ] = False,
+    headless: Annotated[bool, typer.Option(help="Run browser in headless mode.")] = False,
 ):
+    """
+    Search google for images and save the urls to disk. Also download the images if
+    --download is used.
+    """
     save_dir = output.joinpath(query)
-    scraper = GoogleImageScraper(save_dir)
+    scraper = GoogleImageScraper(save_dir, headless=headless)
     urls = scraper.get_image_urls(
         query, limit=limit, skip=skip, keywords=keywords, min_res=min_res, max_res=max_res
     )

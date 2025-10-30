@@ -72,7 +72,7 @@ class GoogleImageScraper:
         """
         self.options = Options()
         if self.headless:
-            self.options.add_argument("--headless")
+            self.options.add_argument("--headless=new")
 
         # Set random user agent
         self.user_agent = UserAgent(platforms=["desktop"], min_version=120.0).random

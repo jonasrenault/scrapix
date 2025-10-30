@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scrapix"
-version = "0.1.0"
+version = "1.0.0"
 description = "Scrapix - Smart, fast, and simple image scraper for Google Search"
 readme = "README.md"
 license = { text = "MIT" }

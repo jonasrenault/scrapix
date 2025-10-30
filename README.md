@@ -113,7 +113,7 @@ for url in urls:
 
 ## Headless scraping
 
-Scrapix uses [selenium](https://github.com/SeleniumHQ/Selenium) to browse Google Search and retrive image links. Selenium lets your run a browser in `headless` mode, *i.e.* without a user interface, allowing the scraping to run in the background. However, running a browser in `headless` mode is a clear sign of scraping for bot detection algorithms, especially Google's, which shows a Captcha when Scrapix is run in `headless` mode.
+Scrapix uses [selenium](https://github.com/SeleniumHQ/Selenium) to browse Google Search and retrieve image links. Selenium lets your run a browser in `headless` mode, *i.e.* without a user interface, allowing the scraping to run in the background. However, running a browser in `headless` mode is a clear sign of scraping for bot detection algorithms, especially Google's, which shows a Captcha when Scrapix is run in `headless` mode.
 
 You can turn on `headless` mode by using the `headless` option with the CLI, or by passing `headless=True` to `GoogleImageScraper`, but in most cases this will lead to a Captcha being shown on the page instead of results and Scrapix will raise an error.
 
@@ -121,8 +121,8 @@ You can turn on `headless` mode by using the `headless` option with the CLI, or 
 
 Google Search uses generated class names and ids for the HTML elements displayed on the results page, and these names and ids change from time to time, making it harder to select the relevant elements on the page. The CSS selectors that scrapix uses can be configured with environment variables. There are two CSS selectors
 
-1. `THUMBNAIL_DIV_SELECTOR="div.F0uyec"` is the CSS selector for thumbnail divs on the Google Image results page
-2. `IMAGE_CLASSES='["n3VNCb", "iPVvYb", "r48jcc", "pT0Scc"]'` is the list of possible CSS classes for the source image displayed after having clicked on a thumbnail in the results page
+1. `THUMBNAIL_DIV_SELECTOR="div.F0uyec"` is the CSS selector for thumbnail divs on the Google Image results page.
+2. `IMAGE_CLASSES='["n3VNCb", "iPVvYb", "r48jcc", "pT0Scc"]'` is the list of possible CSS classes for the source image displayed after having clicked on a thumbnail in the results page.
 
 These values can be overridden either by setting the `THUMBNAIL_DIV_SELECTOR` or `IMAGE_CLASSES` envrionment variables in your shell, or by creating a `.env` file with these variables in your working directory.
 

@@ -704,7 +704,7 @@ wheels = [
 
 [[package]]
 name = "scrapix"
-version = "0.1.0"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "fake-useragent" },

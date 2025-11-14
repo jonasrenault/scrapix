@@ -12,8 +12,8 @@ class Settings(BaseSettings):
 
     # Images link text at top of page after a search to switch to image results
     IMAGES_LINK_TEXT: str = "Images"
-    # CSS selector for thumbnail divs on GoogleImage results page
-    THUMBNAIL_DIV_SELECTOR: str = "div.F0uyec"
+    # CSS class for thumbnail divs on GoogleImage results page
+    THUMBNAIL_DIV_CLASS: str = "F0uyec"
     # CSS classes of source images after having clicked on a thumbnail in results page
     IMAGE_CLASSES: list[str] = ["n3VNCb", "iPVvYb", "r48jcc", "pT0Scc"]
 

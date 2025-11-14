@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 from typing import Annotated
@@ -54,6 +55,25 @@ def download(
     download_urls(urls, save_dir=save_dir, force=force)
 
 
+async def scrape_urls(
+    scraper: GoogleImageScraper,
+    query: str,
+    save_dir: Path,
+    limit: int,
+    skip: int,
+    keywords: list[str],
+    min_res: tuple[int, int] | None,
+    max_res: tuple[int, int] | None,
+    download: bool,
+    force: bool,
+):
+    urls = await scraper.get_image_urls(
+        query, limit=limit, skip=skip, keywords=keywords, min_res=min_res, max_res=max_res
+    )
+    if download:
+        download_urls(urls, save_dir=save_dir, force=force)
+
+
 @app.command()
 def scrape(
     query: Annotated[str, typer.Argument(help="Search query.")],
@@ -99,12 +119,20 @@ def scrape(
     """
     save_dir = output.joinpath(query)
     scraper = GoogleImageScraper(save_dir, headless=headless)
-    urls = scraper.get_image_urls(
-        query, limit=limit, skip=skip, keywords=keywords, min_res=min_res, max_res=max_res
+    asyncio.run(
+        scrape_urls(
+            scraper,
+            query,
+            save_dir,
+            limit,
+            skip,
+            keywords,
+            min_res,
+            max_res,
+            download,
+            force,
+        )
     )
-
-    if download:
-        download_urls(urls, save_dir=save_dir, force=force)
 
 
 if __name__ == "__main__":

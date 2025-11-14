@@ -1,17 +1,14 @@
+import asyncio
 import logging
 import random
-import time
 from pathlib import Path
 
-from fake_useragent import UserAgent
 from PIL import Image
-from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from pydoll.browser import Chrome
+from pydoll.browser.options import ChromiumOptions
+from pydoll.browser.tab import Tab
+from pydoll.elements.web_element import WebElement
+from pydoll.exceptions import ElementNotFound
 
 from scrapix.config.settings import settings
 from scrapix.urls import ImageUrl, read_urls, write_urls
@@ -50,8 +47,7 @@ class GoogleImageScraper:
             self.save_dir.mkdir(parents=True, exist_ok=True)
         LOGGER.info(f"Saving results to [bold blue]{self.save_dir}[/].")
         self._load_urls()
-
-        self._setup_webdriver()
+        self._setup_options()
 
     def _load_urls(self) -> None:
         urls_file = self.save_dir / self.urls_file
@@ -65,127 +61,112 @@ class GoogleImageScraper:
         LOGGER.info(f"Saving {len(urls)} urls to {urls_file}.")
         write_urls(urls, urls_file)
 
-    def _setup_webdriver(self):
+    def _setup_options(self):
         """
-        Setup the selenium webdriver: add a random UserAgent and options to avoid
-        bot detection.
+        Setup the browser configuration with custom options.
         """
-        self.options = Options()
-        if self.headless:
-            self.options.add_argument("--headless=new")
+        self.options = ChromiumOptions()
+        self.options.headless = self.headless
+        self.viewport = (random.randint(1200, 2000), random.randint(900, 1250))
 
-        # Set random user agent
-        self.user_agent = UserAgent(platforms=["desktop"], min_version=120.0).random
-        self.options.add_argument(f"--user-agent={self.user_agent}")
-
-        # Set options to hide selenium webdriver
-        self.options.add_argument("start-maximized")
-        self.options.add_argument("--disable-blink-features=AutomationControlled")
-        self.options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        self.options.add_experimental_option("useAutomationExtension", False)
-        self.driver = webdriver.Chrome(options=self.options)
-
-        # set random viewport
-        self.viewport = (random.randint(1000, 1100), random.randint(1101, 1250))
-        self.driver.set_window_size(*self.viewport)
-
-        LOGGER.info(f"Chrome web driver initialized. \n{self}")
+        self.options.add_argument("--start-maximized")
+        self.options.add_argument("--disable-notifications")
+        self.options.add_argument("--disable-gpu")
+        self.options.add_argument(f"--window-size={self.viewport[0]},{self.viewport[1]}")
 
     def __str__(self) -> str:
         repr_str = (
             f"{self.__class__.__name__}: Headless={self.headless}, "
-            f"Viewport={self.viewport}, UserAgent={self.user_agent}, "
-            f"WebDriver={self.driver.execute_script("return navigator.webdriver;")}.\n"
-            f"Options: {self.options.to_capabilities()}"
+            f"Viewport={self.viewport}\nOptions: {self.options}"
         )
         return repr_str
 
-    def _log_page(self, show: bool = False):
+    async def _log_page(self, tab: Tab, show: bool = False):
         """
-        Log the current page in the webdriver by saving a screenshot and the full dom tree
-        to disk.
+        Log the current page by saving a screenshot and the page source to disk.
 
         Args:
+            tab (Tab): the current browser tab.
             show (bool, optional): show the screenshot. Defaults to False.
         """
         screen = self.save_dir / "screenshot.png"
-        self.driver.save_screenshot(screen)
+        await tab.take_screenshot(screen)
+        html = await tab.page_source
         with open(self.save_dir / "page.html", "w") as f:
-            f.write(
-                self.driver.execute_script("return document.documentElement.outerHTML")
-            )
+            f.write(html)
         if show:
             screenshot = Image.open(screen)
             screenshot.show()
 
-    def _check_recaptcha(self) -> None:
+    async def _check_recaptcha(self, tab: Tab) -> bool:
         """
         Raise a RuntimeError if page shows a ReCaptcha.
 
+        Args:
+            tab (Tab): the current browser tab.
+
         Raises:
             RuntimeError: if page shows a ReCaptcha.
-        """
-        try:
-            LOGGER.info("Looking for ReCaptcha.")
-            WebDriverWait(self.driver, 5).until(
-                EC.frame_to_be_available_and_switch_to_it(
-                    (
-                        By.XPATH,
-                        "//iframe[starts-with(@name, 'a-') and starts-with(@src, 'https://www.google.com/recaptcha')]",
-                    )
-                )
-            )
-            LOGGER.error("Recaptcha detected.")
-            raise RuntimeError("Recaptcha detected.")
-        except TimeoutException:
-            LOGGER.info("ReCaptcha not found.")
-            # no recaptch detected.
-            return
 
-    def _refuse_cookies(self) -> None:
+        Returns:
+            bool: False if no recaptcha was found.
+        """
+        LOGGER.info("Looking for ReCaptcha.")
+        has_recaptcha = await tab.query(
+            "//iframe[starts-with(@name, 'a-') and starts-with(@src, 'https://www.google.com/recaptcha')]",
+            timeout=1,
+            raise_exc=False,
+        )
+        if has_recaptcha:
+            raise RuntimeError("Recaptcha detected.")
+        LOGGER.info("ReCaptcha not found.")
+        return False
+
+    async def _refuse_cookies(self, tab: Tab):
         """
         Click on `Reject all` button to refuse cookie policy.
-        `Reject all` button either has id W0wltc, or is an input button with
-        aria-label='Reject all'.
+        `Reject all` button either has id W0wltc.
+
+        Args:
+            tab (Tab): the current browser tab.
 
         Raises:
-            TimeoutException: if `Reject all` button cannot be located on page.
+            ElementNotFound: if `Reject all` button cannot be located on page.
         """
         LOGGER.info("Clicking on `Reject All` cookie button.")
-        try:
-            WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, "input.searchButton[aria-label='Reject all']")
-                )
-            ).click()
-            return
-        except TimeoutException:
-            pass
-
-        try:
-            WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable((By.ID, "W0wltc"))
-            ).click()
-            return
-        except TimeoutException as e:
+        reject_btn = await tab.find(
+            tag_name="button",
+            id="W0wltc",
+            timeout=2,
+            raise_exc=False,
+            find_all=False,
+        )
+        if reject_btn:
+            await reject_btn.click()
+        else:
             LOGGER.error("Unable to locate `Reject All` cookie button.")
-            raise e
+            raise ElementNotFound("Unable to locate `Reject All` cookie button.")
 
-    def _click_images_search(self) -> None:
+    async def _click_images_search(self, tab: Tab):
         """
         Click on `Images` link to navigate to Image search.
+
+        Args:
+            tab (Tab): the current browser tab.
+
+        Raises:
+            ElementNotFound: if Images link cannot be located on page.
         """
         # Click on images search button.
-        try:
-            LOGGER.info("Clicking Images search button.")
-            time.sleep(1 + random.random())
-            WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable((By.LINK_TEXT, settings.IMAGES_LINK_TEXT))
-            ).click()
-            return
-        except TimeoutException as e:
+        LOGGER.info("Clicking Images search button.")
+        images_link = await tab.find(
+            text=settings.IMAGES_LINK_TEXT, timeout=2, raise_exc=False, find_all=False
+        )
+        if images_link:
+            await images_link.click()
+        else:
             LOGGER.error("Unable to locate `Image` link.")
-            raise e
+            raise ElementNotFound("Unable to locate `Image` link.")
 
     def _validate_image_url(
         self,
@@ -221,24 +202,31 @@ class GoogleImageScraper:
 
         return True
 
-    def _extract_image_url(self) -> ImageUrl | None:
+    async def _extract_image_url(self, tab: Tab) -> ImageUrl | None:
         """
         Look for a valid image tag in the page after having clicked on a
         thumbnail. A valid image tag has one of the known classes, and points
         to a url which isn't of the type https://encrypted-tbn0.gstatic.com
 
+        Args:
+            tab (Tab): the current browser tab.
+
         Returns:
             ImageUrl | None: a valid ImageUrl or None if not found.
         """
         for class_name in settings.IMAGE_CLASSES:
-            for image in self.driver.find_elements(By.CLASS_NAME, class_name):
+            image = await tab.find(
+                tag_name="img", class_name=class_name, raise_exc=False, find_all=False
+            )
+            if image is not None:
                 url = image.get_attribute("src")
                 if url is not None and "http" in url and "encrypted" not in url:
                     return ImageUrl(image.get_attribute("alt"), url)
         return None
 
-    def _scroll_through_thumbnails(
+    async def _scroll_through_thumbnails(
         self,
+        tab: Tab,
         thumbnails: list[WebElement],
         limit: int,
         urls: set[ImageUrl],
@@ -251,6 +239,7 @@ class GoogleImageScraper:
         source image and extract its url.
 
         Args:
+            tab (Tab): the current browser tab.
             thumbnails (list[WebElement]): the list of thumbnails to click.
             limit (int): the maximum number of image urls to extract.
             urls (set[ImageUrl]): the set of collected image urls.
@@ -262,26 +251,20 @@ class GoogleImageScraper:
         """
         # make sure first thumbnail is into view
         if len(thumbnails) > 0:
-            thumbnails[0].location_once_scrolled_into_view
+            await thumbnails[0].scroll_into_view()
 
         # try to click on every new thumbnail to get the real image behind it
         for thumbnail in thumbnails:
             try:
-                # Using EC.element_to_be_clickable will scroll down to the element
-                # (the element needs to be in the viewport to be clickable).
-                # This is important as scrolling down will load more results
-                # on the page.
-                WebDriverWait(self.driver, 3).until(
-                    EC.element_to_be_clickable(thumbnail)
-                ).click()
-                time.sleep(0.5 + random.random())
+                await thumbnail.click()
+                await asyncio.sleep(random.uniform(0.5, 2.0))
             except Exception:
                 LOGGER.warning(
-                    f"Exception scrolling to thumbnail {thumbnail}", exc_info=True
+                    f"Exception clicking on thumbnail {thumbnail}", exc_info=True
                 )
                 continue
 
-            url = self._extract_image_url()
+            url = await self._extract_image_url(tab)
             if url is None or not self._validate_image_url(
                 url, keywords, min_res, max_res
             ):
@@ -293,8 +276,9 @@ class GoogleImageScraper:
             if len(urls) >= limit:
                 break
 
-    def _gather_urls(
+    async def _gather_urls(
         self,
+        tab: Tab,
         limit: int,
         skip: int,
         keywords: list[str],
@@ -307,6 +291,7 @@ class GoogleImageScraper:
         get its url.
 
         Args:
+            tab (Tab): the current browser tab.
             limit (int): the maximum limit of image urls to fetch.
             skip (int): number of results to skip.
             keywords (list[str]): keywords to avoid in image url or title
@@ -319,7 +304,7 @@ class GoogleImageScraper:
             set[ImageUrl]: a set of ImageUrls
         """
         LOGGER.info("Gathering image urls.")
-        time.sleep(2 + random.random())
+        await asyncio.sleep(random.uniform(1.0, 2.0))
         # Loop through all the thumbnails, stopping when we found enough images or
         # when results are exhausted.
         urls: set[ImageUrl] = set()
@@ -327,8 +312,8 @@ class GoogleImageScraper:
         new_results = True
         while len(urls) < limit and new_results:
             # Fetch thumbnails
-            thumbnails = self.driver.find_elements(
-                By.CSS_SELECTOR, settings.THUMBNAIL_DIV_SELECTOR
+            thumbnails = await tab.find(
+                tag_name="div", class_name=settings.THUMBNAIL_DIV_CLASS, find_all=True
             )
 
             # Check that we have new results (thumbnails not clicked on already)
@@ -339,14 +324,15 @@ class GoogleImageScraper:
             if skip > 0 and skip > len(thumbnails):
                 LOGGER.info("Skipping ahead.")
                 # scroll to last thumbnail
-                thumbnails[-1].location_once_scrolled_into_view
-                time.sleep(0.5 + random.random())
+                await thumbnails[-1].scroll_into_view()
+                await asyncio.sleep(random.uniform(1.0, 2.0))
                 seen_thumbnails = len(thumbnails)
                 continue
 
             # Scroll through thumbnails, clicking on them to get the real image urls
             to_scroll = thumbnails[max(seen_thumbnails, skip) :]
-            self._scroll_through_thumbnails(
+            await self._scroll_through_thumbnails(
+                tab,
                 to_scroll,
                 limit=limit,
                 urls=urls,
@@ -361,7 +347,7 @@ class GoogleImageScraper:
         LOGGER.info(f"Done gathering image urls. Found {len(urls)} new image urls.")
         return urls
 
-    def get_image_urls(
+    async def get_image_urls(
         self,
         query: str,
         limit: int = 50,
@@ -373,7 +359,7 @@ class GoogleImageScraper:
         """
         Main method for GoogleImageScraper. Search google for the `query` and loop
         through image results, clicking on thumbnails to extract the source image urls.
-        Scraped image urls are saved to disk in self.urls_file in the self.save_dir
+        Scraped image urls are saved to disk in `self.urls_file` in the `self.save_dir`
         directory.
 
         Args:
@@ -391,23 +377,26 @@ class GoogleImageScraper:
         Returns:
             set[ImageUrl]: the collected image urls.
         """
-        try:
-            self._log_search(query, limit, skip, keywords, min_res, max_res)
-            self.driver.get(f"https://www.google.com/search?q={query}")
-            time.sleep(1 + random.random())
+        self._log_search(query, limit, skip, keywords, min_res, max_res)
+        async with Chrome(options=self.options) as browser:
+            tab = await browser.start()
+            await tab.go_to(f"https://www.google.com/search?q={query}", timeout=30)
+            await asyncio.sleep(random.uniform(1.0, 3.0))
+            try:
+                await self._check_recaptcha(tab)
+                await self._refuse_cookies(tab)
+                await self._click_images_search(tab)
+                urls = await self._gather_urls(
+                    tab, limit, skip, keywords, min_res, max_res
+                )
+                self.urls |= urls
+                self._save_urls(self.urls)
 
-            self._check_recaptcha()
-            self._refuse_cookies()
-            self._click_images_search()
-            urls = self._gather_urls(limit, skip, keywords, min_res, max_res)
-            self.urls |= urls
-            self._save_urls(self.urls)
-
-            self._log_page()
-            return urls
-        except Exception:
-            LOGGER.error("An exception occured while scraping.", exc_info=True)
-            self._log_page()
+                await self._log_page(tab)
+                return urls
+            except Exception:
+                LOGGER.error("An exception occured while scraping.", exc_info=True)
+                await self._log_page(tab)
 
         return set()
 

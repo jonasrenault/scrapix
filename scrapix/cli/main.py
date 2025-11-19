@@ -56,7 +56,6 @@ def download(
 
 
 async def scrape_urls(
-    scraper: GoogleImageScraper,
     query: str,
     save_dir: Path,
     limit: int,
@@ -66,7 +65,9 @@ async def scrape_urls(
     max_res: tuple[int, int] | None,
     download: bool,
     force: bool,
+    headless: bool,
 ):
+    scraper = await GoogleImageScraper.create(save_dir, headless=headless)
     urls = await scraper.get_image_urls(
         query, limit=limit, skip=skip, keywords=keywords, min_res=min_res, max_res=max_res
     )
@@ -118,10 +119,8 @@ def scrape(
     --download is used.
     """
     save_dir = output.joinpath(query)
-    scraper = GoogleImageScraper(save_dir, headless=headless)
     asyncio.run(
         scrape_urls(
-            scraper,
             query,
             save_dir,
             limit,
@@ -131,6 +130,7 @@ def scrape(
             max_res,
             download,
             force,
+            headless,
         )
     )
 

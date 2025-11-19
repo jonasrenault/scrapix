@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 import random
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 from pydoll.browser import Chrome
@@ -47,7 +49,18 @@ class GoogleImageScraper:
             self.save_dir.mkdir(parents=True, exist_ok=True)
         LOGGER.info(f"Saving results to [bold blue]{self.save_dir}[/].")
         self._load_urls()
-        self._setup_options()
+
+    @classmethod
+    async def create(
+        cls,
+        save_dir: Path,
+        headless: bool = False,
+        urls_file: str = "urls.json",
+        force: bool = False,
+    ) -> "GoogleImageScraper":
+        self = cls(save_dir, headless, urls_file, force)
+        await self._setup_options()
+        return self
 
     def _load_urls(self) -> None:
         urls_file = self.save_dir / self.urls_file
@@ -61,23 +74,97 @@ class GoogleImageScraper:
         LOGGER.info(f"Saving {len(urls)} urls to {urls_file}.")
         write_urls(urls, urls_file)
 
-    def _setup_options(self):
+    async def _setup_options(self):
         """
         Setup the browser configuration with custom options.
         """
-        self.options = ChromiumOptions()
-        self.options.headless = self.headless
-        self.viewport = (random.randint(1200, 2000), random.randint(900, 1250))
+        # Extract the default browser profile
+        options = ChromiumOptions()
+        options.add_argument("--headless=new")
+        async with Chrome(options=options) as browser:
+            tab = await browser.start()
+            self.profile = await self.collect_browser_profile(tab)
+            self.profile["userAgent"] = self.profile["userAgent"].replace("Headless", "")
+            LOGGER.info(f"Browser profile:\n{json.dumps(self.profile, indent=2)}")
 
+        # Create browser configuration with correct options
+        self.options = ChromiumOptions()
+
+        if self.headless:
+            self.options.add_argument("--headless=new")
         self.options.add_argument("--start-maximized")
         self.options.add_argument("--disable-notifications")
         self.options.add_argument("--disable-gpu")
-        self.options.add_argument(f"--window-size={self.viewport[0]},{self.viewport[1]}")
+
+        # 1. User-Agent
+        self.options.add_argument(f'--user-agent={self.profile["userAgent"]}')
+        # 2. Window size (screen dimensions)
+        screen = self.profile["screen"]
+        self.options.add_argument(f'--window-size={screen["width"]},{screen["height"]}')
+        # 3. Device scale factor (for high-DPI displays)
+        if screen.get("deviceScaleFactor", 1.0) != 1.0:
+            self.options.add_argument(
+                f'--device-scale-factor={screen["deviceScaleFactor"]}'
+            )
+
+    async def collect_browser_profile(self, tab: Tab) -> dict[str, Any]:
+        result = await tab.execute_script(
+            """return {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                languages: navigator.languages,
+                hardwareConcurrency: navigator.hardwareConcurrency,
+                deviceMemory: navigator.deviceMemory,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                maxTouchPoints: navigator.maxTouchPoints,
+
+                screen: {
+                    width: screen.width,
+                    height: screen.height,
+                    availWidth: screen.availWidth,
+                    availHeight: screen.availHeight,
+                    colorDepth: screen.colorDepth,
+                    pixelDepth: screen.pixelDepth,
+                },
+
+                // Window
+                window: {
+                    innerWidth: window.innerWidth,
+                    innerHeight: window.innerHeight,
+                    outerWidth: window.outerWidth,
+                    outerHeight: window.outerHeight,
+                    devicePixelRatio: window.devicePixelRatio,
+                },
+
+                // Timezone
+                timezone: {
+                    offset: new Date().getTimezoneOffset(),
+                    name: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                },
+
+                // Plugins (legacy, but still checked)
+                plugins: Array.from(navigator.plugins).map(p => ({
+                    name: p.name,
+                    description: p.description,
+                })),
+
+                // User Agent Data (Chrome)
+                userAgentData: navigator.userAgentData ? {
+                    brands: navigator.userAgentData.brands,
+                    mobile: navigator.userAgentData.mobile,
+                    platform: navigator.userAgentData.platform,
+                } : null,
+            };""",
+            return_by_value=True,
+        )
+        if "value" not in result["result"]["result"]:
+            raise RuntimeError("Unable to retrieve browser profile.")
+        return result["result"]["result"]["value"]
 
     def __str__(self) -> str:
         repr_str = (
             f"{self.__class__.__name__}: Headless={self.headless}, "
-            f"Viewport={self.viewport}\nOptions: {self.options}"
+            f"Options: {self.options}"
         )
         return repr_str
 
@@ -129,9 +216,6 @@ class GoogleImageScraper:
 
         Args:
             tab (Tab): the current browser tab.
-
-        Raises:
-            ElementNotFound: if `Reject all` button cannot be located on page.
         """
         LOGGER.info("Clicking on `Reject All` cookie button.")
         reject_btn = await tab.find(
@@ -144,8 +228,7 @@ class GoogleImageScraper:
         if reject_btn:
             await reject_btn.click()
         else:
-            LOGGER.error("Unable to locate `Reject All` cookie button.")
-            raise ElementNotFound("Unable to locate `Reject All` cookie button.")
+            LOGGER.info("Unable to locate `Reject All` cookie button.")
 
     async def _click_images_search(self, tab: Tab):
         """
@@ -394,11 +477,10 @@ class GoogleImageScraper:
 
                 await self._log_page(tab)
                 return urls
-            except Exception:
+            except Exception as e:
                 LOGGER.error("An exception occured while scraping.", exc_info=True)
                 await self._log_page(tab)
-
-        return set()
+                raise e
 
     def _log_search(
         self,

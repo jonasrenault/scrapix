@@ -6,6 +6,10 @@ Scrapix is an automated image scraper designed to collect pictures from Google I
 
 Scrapix requires a recent version of python: ![python_version](https://img.shields.io/badge/Python-%3E=3.12-blue).
 
+### Dependencies
+
+Scrapix uses the [pydoll](https://github.com/autoscrape-labs/pydoll) library to automate control of a Chrome browser. **It is therefore required to have a recent version of Chrome browser installed in order to run Scrapix.**
+
 ### Install from github
 
 Clone the repository and install the project in your python environment, either using `pip`
@@ -91,6 +95,7 @@ scrapix scrape --help
 │ --download      --no-download                          Save images on disk after scraping the urls. [default: download]     │
 │ --force         --no-force                             Force redownload of images already present on disk.                  │
 │                                                        [default: no-force]                                                  │
+│ --headless      --no-headless                          Run browser in headless mode. [default: no-headless]                 │
 │ --help                                                 Show this message and exit.                                          │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -137,9 +142,7 @@ asyncio.run(
 
 ## Headless scraping
 
-Scrapix uses [selenium](https://github.com/SeleniumHQ/Selenium) to browse Google Search and retrieve image links. Selenium lets your run a browser in `headless` mode, *i.e.* without a user interface, allowing the scraping to run in the background. However, running a browser in `headless` mode is a clear sign of scraping for bot detection algorithms, especially Google's, which shows a Captcha when Scrapix is run in `headless` mode.
-
-You can turn on `headless` mode by using the `headless` option with the CLI, or by passing `headless=True` to `GoogleImageScraper`, but in most cases this will lead to a Captcha being shown on the page instead of results and Scrapix will raise an error.
+`headless` mode runs a browser without a user interface, allowing the scraping to run in the background. You can turn on `headless` mode by using the `--headless` option with the CLI, or by passing `headless=True` to `GoogleImageScraper`. **In headless mode, the viewport cannot be modified and is set to Chrome's default in headless mode (800 x 600 pixels).**
 
 ## CSS selectors
 

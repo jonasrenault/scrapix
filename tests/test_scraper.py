@@ -5,6 +5,7 @@ import pytest
 from scrapix.scraper import GoogleImageScraper
 
 
+@pytest.mark.ci
 @pytest.mark.asyncio
 async def test_headless_google_scraping(tmp_path: Path):
     urls_file = "my_duck_urls.json"

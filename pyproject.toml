@@ -77,3 +77,9 @@ filterwarnings = [
     "ignore::UserWarning",
     'ignore::DeprecationWarning',
 ]
+markers = [
+    "ci: marks tests to be run in CI environments"
+]
+addopts = [
+    "-m not ci"
+]

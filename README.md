@@ -98,17 +98,41 @@ scrapix scrape --help
 ### Python
 
 ```python
+import asyncio
 from pathlib import Path
+
 from scrapix import GoogleImageScraper
 
-save_dir = Path("./images")
-scraper = GoogleImageScraper(save_dir)
-# search for images and return a set of image urls
-urls = scraper.get_image_urls(query="duck", limit=10, keywords=["rubber", "toy"], min_res=(640, 640), max_res=(1200, 1200))
 
-# download each image to disk
-for url in urls:
-    url.download(save_dir=save_dir)
+async def scrape(
+    query: str,
+    save_dir: Path,
+    limit: int,
+    keywords: list[str],
+    min_res: tuple[int, int] | None,
+    max_res: tuple[int, int] | None,
+):
+    scraper = await GoogleImageScraper.create(save_dir)
+    # search for images and return a set of image urls
+    urls = await scraper.get_image_urls(
+        query, limit=limit, keywords=keywords, min_res=min_res, max_res=max_res
+    )
+
+    # download each image to disk
+    for url in urls:
+        url.download(save_dir=save_dir)
+
+
+asyncio.run(
+    scrape(
+        query="duck",
+        save_dir=Path("./images"),
+        limit=10,
+        keywords=["rubber", "toy"],
+        min_res=(640, 640),
+        max_res=(1200, 1200),
+    )
+)
 ```
 
 ## Headless scraping

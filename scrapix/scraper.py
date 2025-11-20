@@ -28,18 +28,10 @@ class GoogleImageScraper:
         force: bool = False,
     ):
         """
-        Init a GoogleImageScraper to retrieve image urls from a google search and
-        save them to disk. Image urls will be saved as json in the file `urls_file`
-        in the `save_dir` directory. If ImageUrls are already present in `urls_file`,
-        they will be loaded and only new ImageUrls will be added to the list, unless
-        force is True.
+        **This constructor should not be called directly.**
 
-        Args:
-            save_dir (Path): the directory where urls will be saved.
-            headless (bool, optional): use headless web driver. Defaults to False.
-            urls_file (str, optional): urls file name. Defaults to "urls.json".
-            force (bool, optional): ignore urls already present in urls_file.
-                Defaults to False.
+        Instead, use await GoogleImageScraper.create(...) to properly initialize a new
+        scraper instance.
         """
         self.headless = headless
         self.urls_file = urls_file
@@ -58,8 +50,25 @@ class GoogleImageScraper:
         urls_file: str = "urls.json",
         force: bool = False,
     ) -> "GoogleImageScraper":
+        """
+        Create a GoogleImageScraper to retrieve image urls from a google search and
+        save them to disk. Image urls will be saved as json in the file `urls_file`
+        in the `save_dir` directory. If ImageUrls are already present in `urls_file`,
+        they will be loaded and only new ImageUrls will be added to the list, unless
+        force is True.
+
+        Args:
+            save_dir (Path): the directory where urls will be saved.
+            headless (bool, optional): use headless web driver. Defaults to False.
+            urls_file (str, optional): urls file name. Defaults to "urls.json".
+            force (bool, optional): ignore urls already present in urls_file.
+                Defaults to False.
+
+        Returns:
+            GoogleImageScraper: the created scraper.
+        """
         self = cls(save_dir, headless, urls_file, force)
-        await self._setup_options()
+        await self._setup_browser()
         return self
 
     def _load_urls(self) -> None:
@@ -74,9 +83,11 @@ class GoogleImageScraper:
         LOGGER.info(f"Saving {len(urls)} urls to {urls_file}.")
         write_urls(urls, urls_file)
 
-    async def _setup_options(self):
+    async def _setup_browser(self):
         """
-        Setup the browser configuration with custom options.
+        Setup the browser configuration with custom options. This method first collects
+        the default browser profile, then creates and saves browser options, setting
+        appropriate values for the userAgent and screen size to avoid bot detection.
         """
         # Extract the default browser profile
         options = ChromiumOptions()
@@ -85,7 +96,6 @@ class GoogleImageScraper:
             tab = await browser.start()
             self.profile = await self.collect_browser_profile(tab)
             self.profile["userAgent"] = self.profile["userAgent"].replace("Headless", "")
-            LOGGER.info(f"Browser profile:\n{json.dumps(self.profile, indent=2)}")
 
         # Create browser configuration with correct options
         self.options = ChromiumOptions()
@@ -106,6 +116,7 @@ class GoogleImageScraper:
             self.options.add_argument(
                 f'--device-scale-factor={screen["deviceScaleFactor"]}'
             )
+        LOGGER.info(f"Creation of scraper complete. {self}")
 
     async def collect_browser_profile(self, tab: Tab) -> dict[str, Any]:
         result = await tab.execute_script(
@@ -163,8 +174,8 @@ class GoogleImageScraper:
 
     def __str__(self) -> str:
         repr_str = (
-            f"{self.__class__.__name__}: Headless={self.headless}, "
-            f"Options: {self.options}"
+            f"{self.__class__.__name__}: Headless={self.headless}. "
+            f"Browser profile:\n{json.dumps(self.profile, indent=2)}"
         )
         return repr_str
 

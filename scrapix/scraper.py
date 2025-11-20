@@ -9,6 +9,7 @@ from PIL import Image
 from pydoll.browser import Chrome
 from pydoll.browser.options import ChromiumOptions
 from pydoll.browser.tab import Tab
+from pydoll.constants import Key
 from pydoll.elements.web_element import WebElement
 from pydoll.exceptions import ElementNotFound
 
@@ -16,6 +17,63 @@ from scrapix.config.settings import settings
 from scrapix.urls import ImageUrl, read_urls, write_urls
 
 LOGGER = logging.getLogger(__name__)
+logging.getLogger("pydoll").setLevel(logging.WARNING)
+
+GET_USER_AGENT_SCRIPT = "return navigator.userAgent;"
+GET_SCREEN_SIZE_SCRIPT = """return {
+    width: screen.width,
+    height: screen.height,
+    availWidth: screen.availWidth,
+    availHeight: screen.availHeight,
+    colorDepth: screen.colorDepth,
+    pixelDepth: screen.pixelDepth,
+};"""
+GET_PROFILE_SCRIT = """return {
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    languages: navigator.languages,
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    deviceMemory: navigator.deviceMemory,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    maxTouchPoints: navigator.maxTouchPoints,
+
+    screen: {
+        width: screen.width,
+        height: screen.height,
+        availWidth: screen.availWidth,
+        availHeight: screen.availHeight,
+        colorDepth: screen.colorDepth,
+        pixelDepth: screen.pixelDepth,
+    },
+
+    // Window
+    window: {
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        outerWidth: window.outerWidth,
+        outerHeight: window.outerHeight,
+        devicePixelRatio: window.devicePixelRatio,
+    },
+
+    // Timezone
+    timezone: {
+        offset: new Date().getTimezoneOffset(),
+        name: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+
+    // Plugins (legacy, but still checked)
+    plugins: Array.from(navigator.plugins).map(p => ({
+        name: p.name,
+        description: p.description,
+    })),
+
+    // User Agent Data (Chrome)
+    userAgentData: navigator.userAgentData ? {
+        brands: navigator.userAgentData.brands,
+        mobile: navigator.userAgentData.mobile,
+        platform: navigator.userAgentData.platform,
+    } : null,
+};"""
 
 
 class GoogleImageScraper:
@@ -23,9 +81,10 @@ class GoogleImageScraper:
     def __init__(
         self,
         save_dir: Path,
-        headless: bool = False,
-        urls_file: str = "urls.json",
-        force: bool = False,
+        headless: bool,
+        urls_file: str,
+        force: bool,
+        viewport: tuple[int, int],
     ):
         """
         **This constructor should not be called directly.**
@@ -37,6 +96,7 @@ class GoogleImageScraper:
         self.urls_file = urls_file
         self.save_dir = save_dir
         self.force = force
+        self.viewport = viewport
         if not self.save_dir.exists():
             self.save_dir.mkdir(parents=True, exist_ok=True)
         LOGGER.info(f"Saving results to [bold blue]{self.save_dir}[/].")
@@ -49,6 +109,7 @@ class GoogleImageScraper:
         headless: bool = False,
         urls_file: str = "urls.json",
         force: bool = False,
+        viewport: tuple[int, int] = (1920, 1080),
     ) -> "GoogleImageScraper":
         """
         Create a GoogleImageScraper to retrieve image urls from a google search and
@@ -67,7 +128,7 @@ class GoogleImageScraper:
         Returns:
             GoogleImageScraper: the created scraper.
         """
-        self = cls(save_dir, headless, urls_file, force)
+        self = cls(save_dir, headless, urls_file, force, viewport)
         await self._setup_browser()
         return self
 
@@ -89,93 +150,47 @@ class GoogleImageScraper:
         the default browser profile, then creates and saves browser options, setting
         appropriate values for the userAgent and screen size to avoid bot detection.
         """
-        # Extract the default browser profile
+        # Extract the default browser screen size and user agent
         options = ChromiumOptions()
         options.add_argument("--headless=new")
         async with Chrome(options=options) as browser:
             tab = await browser.start()
-            self.profile = await self.collect_browser_profile(tab)
-            self.profile["userAgent"] = self.profile["userAgent"].replace("Headless", "")
+            screen = await self._get_browser_script_value(tab, GET_SCREEN_SIZE_SCRIPT)
+            self.userAgent = await self._get_browser_script_value(
+                tab, GET_USER_AGENT_SCRIPT
+            )
+            # self.profile = await self.collect_browser_profile(tab)
+            self.userAgent = self.userAgent.replace("Headless", "")
 
         # Create browser configuration with correct options
         self.options = ChromiumOptions()
 
         if self.headless:
             self.options.add_argument("--headless=new")
+            # in headless mode, the viewport must be equal to the screen size (800 x 600)
+            self.viewport = (screen["width"], screen["height"])
+
         self.options.add_argument("--start-maximized")
         self.options.add_argument("--disable-notifications")
         self.options.add_argument("--disable-gpu")
-
-        # 1. User-Agent
-        self.options.add_argument(f'--user-agent={self.profile["userAgent"]}')
-        # 2. Window size (screen dimensions)
-        screen = self.profile["screen"]
-        self.options.add_argument(f'--window-size={screen["width"]},{screen["height"]}')
-        # 3. Device scale factor (for high-DPI displays)
+        self.options.add_argument(f"--user-agent={self.userAgent}")
+        self.options.add_argument(f"--window-size={self.viewport[0]},{self.viewport[1]}")
         if screen.get("deviceScaleFactor", 1.0) != 1.0:
             self.options.add_argument(
                 f'--device-scale-factor={screen["deviceScaleFactor"]}'
             )
         LOGGER.info(f"Creation of scraper complete. {self}")
 
-    async def collect_browser_profile(self, tab: Tab) -> dict[str, Any]:
-        result = await tab.execute_script(
-            """return {
-                userAgent: navigator.userAgent,
-                platform: navigator.platform,
-                languages: navigator.languages,
-                hardwareConcurrency: navigator.hardwareConcurrency,
-                deviceMemory: navigator.deviceMemory,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                maxTouchPoints: navigator.maxTouchPoints,
-
-                screen: {
-                    width: screen.width,
-                    height: screen.height,
-                    availWidth: screen.availWidth,
-                    availHeight: screen.availHeight,
-                    colorDepth: screen.colorDepth,
-                    pixelDepth: screen.pixelDepth,
-                },
-
-                // Window
-                window: {
-                    innerWidth: window.innerWidth,
-                    innerHeight: window.innerHeight,
-                    outerWidth: window.outerWidth,
-                    outerHeight: window.outerHeight,
-                    devicePixelRatio: window.devicePixelRatio,
-                },
-
-                // Timezone
-                timezone: {
-                    offset: new Date().getTimezoneOffset(),
-                    name: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                },
-
-                // Plugins (legacy, but still checked)
-                plugins: Array.from(navigator.plugins).map(p => ({
-                    name: p.name,
-                    description: p.description,
-                })),
-
-                // User Agent Data (Chrome)
-                userAgentData: navigator.userAgentData ? {
-                    brands: navigator.userAgentData.brands,
-                    mobile: navigator.userAgentData.mobile,
-                    platform: navigator.userAgentData.platform,
-                } : null,
-            };""",
-            return_by_value=True,
-        )
+    async def _get_browser_script_value(self, tab: Tab, script: str) -> Any:
+        result = await tab.execute_script(script, return_by_value=True)
         if "value" not in result["result"]["result"]:
-            raise RuntimeError("Unable to retrieve browser profile.")
+            raise RuntimeError(f"Unable to retrieve browser value from script: {script}")
         return result["result"]["result"]["value"]
 
     def __str__(self) -> str:
         repr_str = (
-            f"{self.__class__.__name__}: Headless={self.headless}. "
-            f"Browser profile:\n{json.dumps(self.profile, indent=2)}"
+            f"{self.__class__.__name__}: Headless={self.headless}, "
+            f"Viewport: {self.viewport}, UserAgent: {self.userAgent}."
         )
         return repr_str
 
@@ -350,6 +365,8 @@ class GoogleImageScraper:
         # try to click on every new thumbnail to get the real image behind it
         for thumbnail in thumbnails:
             try:
+                # press escape to close any popups
+                await tab.keyboard.press(Key.ESCAPE)
                 await thumbnail.click()
                 await asyncio.sleep(random.uniform(0.5, 2.0))
             except Exception:
@@ -476,6 +493,8 @@ class GoogleImageScraper:
             tab = await browser.start()
             await tab.go_to(f"https://www.google.com/search?q={query}", timeout=30)
             await asyncio.sleep(random.uniform(1.0, 3.0))
+            profile = await self._get_browser_script_value(tab, GET_PROFILE_SCRIT)
+            LOGGER.debug(f"Browser profile:\n{json.dumps(profile, indent=2)}")
             try:
                 await self._check_recaptcha(tab)
                 await self._refuse_cookies(tab)

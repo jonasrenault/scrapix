@@ -16,8 +16,8 @@ from pydoll.exceptions import ElementNotFound
 from scrapix.config.settings import settings
 from scrapix.urls import ImageUrl, read_urls, write_urls
 
-LOGGER = logging.getLogger(__name__)
 logging.getLogger("pydoll").setLevel(logging.WARNING)
+LOGGER = logging.getLogger(__name__)
 
 GET_USER_AGENT_SCRIPT = "return navigator.userAgent;"
 GET_SCREEN_SIZE_SCRIPT = """return {

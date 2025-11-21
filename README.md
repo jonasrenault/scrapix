@@ -6,6 +6,8 @@ Scrapix is an automated image scraper designed to collect pictures from Google I
 
 Scrapix requires a recent version of python: ![python_version](https://img.shields.io/badge/Python-%3E=3.12-blue).
 
+Scrapix uses the [pydoll](https://github.com/autoscrape-labs/pydoll) library to automate control of a Chrome browser. **It is therefore required to have a recent version of Chrome browser installed in order to run Scrapix.**
+
 ### Install from github
 
 Clone the repository and install the project in your python environment, either using `pip`
@@ -91,6 +93,7 @@ scrapix scrape --help
 │ --download      --no-download                          Save images on disk after scraping the urls. [default: download]     │
 │ --force         --no-force                             Force redownload of images already present on disk.                  │
 │                                                        [default: no-force]                                                  │
+│ --headless      --no-headless                          Run browser in headless mode. [default: no-headless]                 │
 │ --help                                                 Show this message and exit.                                          │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -98,24 +101,46 @@ scrapix scrape --help
 ### Python
 
 ```python
+import asyncio
 from pathlib import Path
+
 from scrapix import GoogleImageScraper
 
-save_dir = Path("./images")
-scraper = GoogleImageScraper(save_dir)
-# search for images and return a set of image urls
-urls = scraper.get_image_urls(query="duck", limit=10, keywords=["rubber", "toy"], min_res=(640, 640), max_res=(1200, 1200))
 
-# download each image to disk
-for url in urls:
-    url.download(save_dir=save_dir)
+async def scrape(
+    query: str,
+    save_dir: Path,
+    limit: int,
+    keywords: list[str],
+    min_res: tuple[int, int] | None,
+    max_res: tuple[int, int] | None,
+):
+    scraper = await GoogleImageScraper.create(save_dir)
+    # search for images and return a set of image urls
+    urls = await scraper.get_image_urls(
+        query, limit=limit, keywords=keywords, min_res=min_res, max_res=max_res
+    )
+
+    # download each image to disk
+    for url in urls:
+        url.download(save_dir=save_dir)
+
+
+asyncio.run(
+    scrape(
+        query="duck",
+        save_dir=Path("./images"),
+        limit=10,
+        keywords=["rubber", "toy"],
+        min_res=(640, 640),
+        max_res=(1200, 1200),
+    )
+)
 ```
 
 ## Headless scraping
 
-Scrapix uses [selenium](https://github.com/SeleniumHQ/Selenium) to browse Google Search and retrieve image links. Selenium lets your run a browser in `headless` mode, *i.e.* without a user interface, allowing the scraping to run in the background. However, running a browser in `headless` mode is a clear sign of scraping for bot detection algorithms, especially Google's, which shows a Captcha when Scrapix is run in `headless` mode.
-
-You can turn on `headless` mode by using the `headless` option with the CLI, or by passing `headless=True` to `GoogleImageScraper`, but in most cases this will lead to a Captcha being shown on the page instead of results and Scrapix will raise an error.
+`headless` mode runs a browser without a user interface, allowing the scraping to run in the background. You can turn on `headless` mode by using the `--headless` option with the CLI, or by passing `headless=True` to `GoogleImageScraper`. **In headless mode, the viewport cannot be modified and is set to Chrome's default in headless mode (800 x 600 pixels).**
 
 ## CSS selectors
 

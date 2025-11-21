@@ -34,8 +34,9 @@ jobs:
       - name: Run mypy
         run: uv run --group dev mypy --config-file=pyproject.toml
 
+      # run all tests by overriding default pytest option which excludes ci tests.
       - name: Test with pytest
-        run: uv run --group dev pytest
+        run: uv run --group dev pytest -s -m "ci or not ci"
 
       # Using uv cache prune --ci at the end of the job is recommended to reduce cache size.
       - name: Cache prune

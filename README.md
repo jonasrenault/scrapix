@@ -153,4 +153,4 @@ These values can be overridden either by setting the `THUMBNAIL_DIV_SELECTOR` or
 
 ## Debug
 
-By default, Scrapix will save a screenshot and the innerHTML of the current page whenever an exception occurs during scraping. These can used for debugging, to check what may have caused the error.
+By default, Scrapix will save a screenshot (`screenshot.png`) and the source HTML (`page.html`) of the current page whenever an exception occurs during scraping and at the end of scraping. These can used for debugging, to check what may have caused the error.

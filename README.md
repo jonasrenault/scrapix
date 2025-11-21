@@ -6,8 +6,6 @@ Scrapix is an automated image scraper designed to collect pictures from Google I
 
 Scrapix requires a recent version of python: ![python_version](https://img.shields.io/badge/Python-%3E=3.12-blue).
 
-### Dependencies
-
 Scrapix uses the [pydoll](https://github.com/autoscrape-labs/pydoll) library to automate control of a Chrome browser. **It is therefore required to have a recent version of Chrome browser installed in order to run Scrapix.**
 
 ### Install from github

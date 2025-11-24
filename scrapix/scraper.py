@@ -3,7 +3,7 @@ import json
 import logging
 import random
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 
 from PIL import Image
 from pydoll.browser import Chrome
@@ -342,7 +342,7 @@ class GoogleImageScraper:
         keywords: list[str],
         min_res: tuple[int, int] | None = None,
         max_res: tuple[int, int] | None = None,
-    ):
+    ) -> AsyncIterator[ImageUrl]:
         """
         Loop through the given list of thumbnails, clicking on each one to reveal the
         source image and extract its url.
@@ -357,7 +357,11 @@ class GoogleImageScraper:
                 Defaults to None.
             max_res (tuple[int, int] | None, optional): maximum resolution.
                 Defaults to None.
+
+        Yields:
+            AsyncIterator[ImageUrl]: the extracted urls.
         """
+
         # make sure first thumbnail is into view
         if len(thumbnails) > 0:
             await thumbnails[0].scroll_into_view()
@@ -383,6 +387,7 @@ class GoogleImageScraper:
 
             urls.add(url)
             LOGGER.info(url)
+            yield url
 
             if len(urls) >= limit:
                 break
@@ -395,7 +400,7 @@ class GoogleImageScraper:
         keywords: list[str],
         min_res: tuple[int, int] | None = None,
         max_res: tuple[int, int] | None = None,
-    ) -> set[ImageUrl]:
+    ) -> AsyncIterator[ImageUrl]:
         """
         Gather image urls from the results page by clicking on each thumbnail. Clicking
         on a thumbnail will display the source image on the side panel, allowing us to
@@ -411,8 +416,8 @@ class GoogleImageScraper:
             max_res (tuple[int, int] | None, optional): maximum resolution.
                 Defaults to None.
 
-        Returns:
-            set[ImageUrl]: a set of ImageUrls
+        Yields:
+            AsyncIterator[ImageUrl]: the extracted image urls.
         """
         LOGGER.info("Gathering image urls.")
         await asyncio.sleep(random.uniform(1.0, 2.0))
@@ -442,7 +447,7 @@ class GoogleImageScraper:
 
             # Scroll through thumbnails, clicking on them to get the real image urls
             to_scroll = thumbnails[max(seen_thumbnails, skip) :]
-            await self._scroll_through_thumbnails(
+            async for url in self._scroll_through_thumbnails(
                 tab,
                 to_scroll,
                 limit=limit,
@@ -450,13 +455,13 @@ class GoogleImageScraper:
                 keywords=keywords,
                 min_res=min_res,
                 max_res=max_res,
-            )
+            ):
+                yield url
 
             # Keep track of thumbnails already seen
             seen_thumbnails = len(thumbnails)
 
         LOGGER.info(f"Done gathering image urls. Found {len(urls)} new image urls.")
-        return urls
 
     async def get_image_urls(
         self,
@@ -466,7 +471,7 @@ class GoogleImageScraper:
         keywords: list[str] = [],
         min_res: tuple[int, int] | None = None,
         max_res: tuple[int, int] | None = None,
-    ) -> set[ImageUrl]:
+    ) -> AsyncIterator[ImageUrl]:
         """
         Main method for GoogleImageScraper. Search google for the `query` and loop
         through image results, clicking on thumbnails to extract the source image urls.
@@ -485,8 +490,8 @@ class GoogleImageScraper:
             max_res (tuple[int, int] | None, optional): maximum resolution.
                 Defaults to None.
 
-        Returns:
-            set[ImageUrl]: the collected image urls.
+        Yields:
+            AsyncIterator[ImageUrl]: the collected image urls.
         """
         self._log_search(query, limit, skip, keywords, min_res, max_res)
         async with Chrome(options=self.options) as browser:
@@ -499,14 +504,14 @@ class GoogleImageScraper:
                 await self._check_recaptcha(tab)
                 await self._refuse_cookies(tab)
                 await self._click_images_search(tab)
-                urls = await self._gather_urls(
+                async for url in self._gather_urls(
                     tab, limit, skip, keywords, min_res, max_res
-                )
-                self.urls |= urls
-                self._save_urls(self.urls)
+                ):
+                    self.urls.add(url)
+                    yield url
 
+                self._save_urls(self.urls)
                 await self._log_page(tab)
-                return urls
             except Exception as e:
                 LOGGER.error("An exception occured while scraping.", exc_info=True)
                 await self._log_page(tab)

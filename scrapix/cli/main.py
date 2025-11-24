@@ -68,9 +68,17 @@ async def scrape_urls(
     headless: bool,
 ):
     scraper = await GoogleImageScraper.create(save_dir, headless=headless)
-    urls = await scraper.get_image_urls(
-        query, limit=limit, skip=skip, keywords=keywords, min_res=min_res, max_res=max_res
-    )
+    urls = [
+        url
+        async for url in scraper.get_image_urls(
+            query,
+            limit=limit,
+            skip=skip,
+            keywords=keywords,
+            min_res=min_res,
+            max_res=max_res,
+        )
+    ]
     if download:
         download_urls(urls, save_dir=save_dir, force=force)
 

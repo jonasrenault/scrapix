@@ -116,13 +116,10 @@ async def scrape(
     max_res: tuple[int, int] | None,
 ):
     scraper = await GoogleImageScraper.create(save_dir)
-    # search for images and return a set of image urls
-    urls = await scraper.get_image_urls(
+    # search for images and download each image to disk
+    async for url in scraper.get_image_urls(
         query, limit=limit, keywords=keywords, min_res=min_res, max_res=max_res
-    )
-
-    # download each image to disk
-    for url in urls:
+    ):
         url.download(save_dir=save_dir)
 
 

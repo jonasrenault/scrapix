@@ -15,9 +15,12 @@ async def test_headless_google_scraping(tmp_path: Path):
     scraper = await GoogleImageScraper.create(
         tmp_path, headless=True, urls_file=urls_file
     )
-    urls = await scraper.get_image_urls(
-        "duck", limit=limit, skip=0, keywords=["rubber", "toy"]
-    )
+    urls = [
+        url
+        async for url in scraper.get_image_urls(
+            "duck", limit=limit, skip=0, keywords=["rubber", "toy"]
+        )
+    ]
 
     assert len(urls) == limit
     assert tmp_path.joinpath(urls_file).exists()

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
         env_file=".env", env_ignore_empty=True, extra="ignore"
     )
 
-    SCRAPIX_HOME_DIR: Path = Path.cwd() / ".cache" / "scrapix"
+    SCRAPIX_HOME_DIR: Path = Path.home() / ".cache" / "scrapix"
 
     # Images link text at top of page after a search to switch to image results
     IMAGES_LINK_TEXT: str = "Images"

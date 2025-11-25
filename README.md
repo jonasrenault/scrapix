@@ -135,6 +135,21 @@ asyncio.run(
 )
 ```
 
+### Graphical User Interface
+
+Scrapix provides a simple GUI built with [Streamlit](https://streamlit.io/) to showcase its use. Run
+
+```bash
+streamlit run scrapix/gui/app.py
+```
+
+to start the GUI in a browser.
+
+<div align="center" width="100%">
+  <img src="resources/screenshots/gui-1.png" width="45%"/>
+  <img src="resources/screenshots/gui-2.png" width="45%"/>
+</div>
+
 ## Headless scraping
 
 `headless` mode runs a browser without a user interface, allowing the scraping to run in the background. You can turn on `headless` mode by using the `--headless` option with the CLI, or by passing `headless=True` to `GoogleImageScraper`. **In headless mode, the viewport cannot be modified and is set to Chrome's default in headless mode (800 x 600 pixels).**

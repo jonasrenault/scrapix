@@ -51,8 +51,8 @@ def test_get_filename():
 
 @responses.activate
 def test_check_dimensions():
+    mock_url = "http://example.org/test/test-image.jpg"
     with open(ROOT_DIR / "resources" / "images" / "scraper.webp", "rb") as image:
-        mock_url = "http://example.org/test/test-image.jpg"
         responses.get(
             mock_url,
             body=image.read(),
